@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DTE4 轉倉決策模擬器 (TSLA/470C 範例，可自訂)</title>
+  <style>
+    :root{ --bg:#0b0f14; --card:#121926; --muted:#94a3b8; --text:#e2e8f0; --accent:#22c55e; --warn:#f59e0b; --danger:#ef4444; --border:#1f2937; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Noto Sans TC",Arial; background:linear-gradient(180deg,#070b10,#0b0f14 30%,#0b0f14); color:var(--text); line-height:1.5}
+    header{padding:24px 16px;text-align:center}
+    header h1{margin:0;font-size:20px;letter-spacing:.4px}
+    .wrap{max-width:1150px;margin:0 auto;padding:16px}
+    .grid{display:grid;grid-template-columns:1.2fr 1fr;gap:16px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    h2{margin:.2rem 0 .8rem;font-size:16px;color:#cbd5e1}
+    label{display:block;font-size:12px;color:var(--muted);margin:6px 0 4px}
+    input,select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #273449;background:#0a1220;color:var(--text)}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .btn{display:inline-block;padding:10px 14px;border-radius:10px;border:1px solid #2b3b54;background:#111827;color:#e5e7eb;cursor:pointer}
+    .btn:hover{filter:brightness(1.15)}
+    .btn-accent{border-color:#155e2d;background:#0f3e1f}
+    .muted{color:var(--muted);font-size:12px}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th,td{border-bottom:1px solid #24324a;padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums}
+    th{font-weight:600;color:#cbd5e1}
+    td:first-child,th:first-child{text-align:left}
+    .green{color:#10b981}
+    .red{color:#ef4444}
+    .flex{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .small{font-size:11px}
+    .badge{border:1px dashed #334155;border-radius:8px;padding:4px 8px;color:#94a3b8}
+    .footer{color:#6b7280;font-size:12px;text-align:center;margin:18px 0}
+    .code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12px;background:#0a1020;border:1px solid #1f2a44;border-radius:8px;padding:10px;overflow:auto}
+  </style>
+</head>
+<body>
+<header>
+  <h1>🧮 DTE4 轉倉決策模擬器（TSLA/470C）</h1>
+  <div class="muted">以你提供的數據當預設值，可自由修改、試算各種情境。內建 Black–Scholes 與簡易決策規則。</div>
+</header>
+
+<div class="wrap grid">
+  <section class="card">
+    <h2>輸入參數</h2>
+    <div class="row">
+      <div>
+        <label>現價 S₀</label>
+        <input id="S0" type="number" step="0.01" value="447.43">
+      </div>
+      <div>
+        <label>本期行權價 K₁（舊倉）</label>
+        <input id="K1" type="number" step="0.01" value="470">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>下期行權價 <b>K₂</b>（新倉，可不同於 K₁）</label>
+        <input id="K2" type="number" step="0.01" value="470">
+      </div>
+      <div>
+        <label>11/7 期權現價（用於基準差額展示）</label>
+        <input id="priceNewNow" type="number" step="0.01" value="16.75">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>10/31 470C 現價（用於累積收入計算）</label>
+        <input id="priceOldNow" type="number" step="0.01" value="12.20">
+      </div>
+      <div>
+        <label>IV（舊/新）%</label>
+        <div class="row">
+          <input id="ivOld" type="number" step="0.01" value="69.51">
+          <input id="ivNew" type="number" step="0.01" value="66.16">
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>θ（舊/新）/天（僅資訊展示）</label>
+        <div class="row">
+          <input id="thetaOld" type="number" step="0.01" value="-0.93">
+          <input id="thetaNew" type="number" step="0.01" value="-0.71">
+        </div>
+      </div>
+      <div>
+        <label>今日 DTE（舊/新）</label>
+        <div class="row">
+          <input id="dteOldNow" type="number" step="1" value="10">
+          <input id="dteNewNow" type="number" step="1" value="17">
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>距離轉倉天數（DTE4 → 轉倉前的持有天數）</label>
+        <input id="holdDays" type="number" step="1" value="6">
+      </div>
+      <div>
+        <label>Delta 觸發（資訊）</label>
+        <input id="deltaTrigger" type="number" step="0.01" value="0.60">
+      </div>
+    </div>
+
+    <div style="margin-top:12px" class="flex">
+      <button class="btn btn-accent" onclick="run()">計算/更新</button>
+      <span class="badge small">r=0、股息=0、Black–Scholes</span>
+      <span class="badge small">價格情境：-3%、0%、+3%、+5%、+10%、+15%</span>
+    </div>
+  </section>
+</div>
+
+<div class="wrap">
+  <section class="card">
+    <h2>結果</h2>
+    <div id="summary" class="muted small"></div>
+    <table id="result">
+      <thead>
+        <tr>
+          <th>場景</th>
+          <th>S（轉倉日）</th>
+          <th>K₂（新倉行權）</th>
+          <th>IV 舊/新</th>
+          <th>Δ(舊@K₁)</th>
+          <th>舊價（BTC @K₁）</th>
+          <th>新價（STO @K₂）</th>
+          <th>淨收入（新−舊）</th>
+          <th>累積收入（今天→轉倉）</th>
+          <th>建議動作</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="footer">
+      僅為教育用途。模型簡化了交易費用、滑價、借券費率、指派機率等現實因素，請自行審慎評估。
+    </div>
+  </section>
+</div>
+
+<script>
+// --- Black–Scholes helpers ---
+function stdNormCdf(x){return 0.5*(1+erf(x/Math.SQRT2));}
+function erf(x){const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;const sign=x<0?-1:1;x=Math.abs(x);const t=1/(1+p*x);const y=1-((((a5*t+a4)*t+a3)*t+a2)*t+a1)*t*Math.exp(-x*x);return sign*y;}
+function bsCall(S,K,T,sigma){if(T<=0||sigma<=0)return Math.max(0,S-K);const vol=sigma*Math.sqrt(T);const d1=(Math.log(S/K)+0.5*sigma*sigma*T)/vol;const d2=d1-vol;const Nd1=stdNormCdf(d1),Nd2=stdNormCdf(d2);return S*Nd1-K*Nd2;}
+function bsDelta(S,K,T,sigma){if(T<=0||sigma<=0)return S>K?1:0;const vol=sigma*Math.sqrt(T);const d1=(Math.log(S/K)+0.5*sigma*sigma*T)/vol;return stdNormCdf(d1);}
+
+function run(){
+  const S0=parseFloat(document.getElementById('S0').value);
+  const K1=parseFloat(document.getElementById('K1').value);
+  const K2=parseFloat(document.getElementById('K2').value);
+  const priceOldNow=parseFloat(document.getElementById('priceOldNow').value);
+  const priceNewNow=parseFloat(document.getElementById('priceNewNow').value);
+  const ivOld=parseFloat(document.getElementById('ivOld').value)/100;
+  const ivNew=parseFloat(document.getElementById('ivNew').value)/100;
+  const dteOldNow=parseInt(document.getElementById('dteOldNow').value,10);
+  const dteNewNow=parseInt(document.getElementById('dteNewNow').value,10);
+  const holdDays=parseInt(document.getElementById('holdDays').value,10);
+
+  const scenarios=[{name:'下跌 −3%',mult:0.97},{name:'橫盤 0%',mult:1.00},{name:'上漲 +3%',mult:1.03},{name:'上漲 +5%',mult:1.05},{name:'上漲 +10%',mult:1.10},{name:'上漲 +15%',mult:1.15}];
+  const tbody=document.querySelector('#result tbody');tbody.innerHTML='';
+  const Told=Math.max(0,(dteOldNow-holdDays))/365;
+  const Tnew=Math.max(0,(dteNewNow-holdDays))/365;
+
+  // summary 顯示基準差額（今日）
+  const summary=document.getElementById('summary');
+  summary.innerHTML=`今日兩期（示例 470C vs 470C）價差 ≈ <span class="green">$${(priceNewNow - priceOldNow).toFixed(2)}/股</span>。實際轉倉時以 K₂=${K2} 計算新倉價。`;
+
+  scenarios.forEach(s=>{
+    const Sroll=S0*s.mult;
+    const oldPrice=bsCall(Sroll,K1,Told,ivOld); // 舊倉用 K1
+    const newPrice=bsCall(Sroll,K2,Tnew,ivNew); // 新倉用 K2（可不同）
+    const delta=bsDelta(Sroll,K1,Told,ivOld);   // 觸發觀察以舊倉 K1 為準
+    const netIncome=newPrice-oldPrice;
+    const cumIncome=(priceOldNow-oldPrice)+newPrice;
+
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td>${s.name}</td>
+      <td>${Sroll.toFixed(2)}</td>
+      <td>${K2.toFixed(2)}</td>
+      <td>${(ivOld*100).toFixed(1)}% / ${(ivNew*100).toFixed(1)}%</td>
+      <td>${delta.toFixed(2)}</td>
+      <td>$${oldPrice.toFixed(2)}</td>
+      <td>$${newPrice.toFixed(2)}</td>
+      <td class='${netIncome>=0?'green':'red'}'>$${netIncome.toFixed(2)}</td>
+      <td class='${cumIncome>=0?'green':'red'}'>$${cumIncome.toFixed(2)}</td>
+      <td>${delta<0.6?`Roll-out 同價（K₂=${K2}）`:`Roll-up 建議（K₂≥${K2}）`}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+</script>
+</body>
+</html>
