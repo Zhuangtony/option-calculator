@@ -1,3 +1,19 @@
+好的！我已經幫你把前面提到的四項優化建議**全部實作**到你的程式碼中了。
+
+這份更新後的程式碼包含了：
+
+1.  **加入「無風險利率 (r)」**：使 BS 模型計算更精確。
+2.  **動態「Delta 觸發」**：決策建議會根據你輸入的 Delta 值動態變化。
+3.  **RWD 響應式設計**：在手機上瀏覽時，版面會自動變為單欄，方便閱讀。
+4.  **自動計算更新**：修改任何參數後，表格會自動重新計算，無需手動按鈕。
+
+你可以直接複製下方的完整程式碼，並將其儲存為 `.html` 檔案來使用。
+
+-----
+
+### 🧮 完整優化版程式碼
+
+```html
 <!doctype html>
 <html lang="zh-Hant">
 <head>
@@ -32,6 +48,22 @@
     .badge{border:1px dashed #334155;border-radius:8px;padding:4px 8px;color:#94a3b8}
     .footer{color:#6b7280;font-size:12px;text-align:center;margin:18px 0}
     .code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12px;background:#0a1020;border:1px solid #1f2a44;border-radius:8px;padding:10px;overflow:auto}
+
+    /* --- 優化 3: RWD 響應式設計 --- */
+    @media (max-width: 768px) {
+      .grid {
+        grid-template-columns: 1fr; /* 改為單欄 */
+      }
+      .row {
+        grid-template-columns: 1fr; /* 輸入欄位也改為單欄 */
+      }
+      header h1 {
+        font-size: 18px;
+      }
+      .wrap {
+        padding: 8px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -98,14 +130,21 @@
         <input id="holdDays" type="number" step="1" value="6">
       </div>
       <div>
-        <label>Delta 觸發（資訊）</label>
-        <input id="deltaTrigger" type="number" step="0.01" value="0.60">
+        <label>Delta 觸發（建議用）</label> <input id="deltaTrigger" type="number" step="0.01" value="0.60">
       </div>
+    </div>
+    
+    <div class="row">
+        <div>
+            <label>無風險利率 r (%)</label>
+            <input id="riskFree" type="number" step="0.01" value="5.0">
+        </div>
+        <div>
+            </div>
     </div>
 
     <div style="margin-top:12px" class="flex">
-      <button class="btn btn-accent" onclick="run()">計算/更新</button>
-      <span class="badge small">r=0、股息=0、Black–Scholes</span>
+      <span class="badge small">股息=0、Black–Scholes (含 r)</span>
       <span class="badge small">價格情境：-3%、0%、+3%、+5%、+10%、+15%</span>
     </div>
   </section>
@@ -143,8 +182,23 @@
 // --- Black–Scholes helpers ---
 function stdNormCdf(x){return 0.5*(1+erf(x/Math.SQRT2));}
 function erf(x){const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;const sign=x<0?-1:1;x=Math.abs(x);const t=1/(1+p*x);const y=1-((((a5*t+a4)*t+a3)*t+a2)*t+a1)*t*Math.exp(-x*x);return sign*y;}
-function bsCall(S,K,T,sigma){if(T<=0||sigma<=0)return Math.max(0,S-K);const vol=sigma*Math.sqrt(T);const d1=(Math.log(S/K)+0.5*sigma*sigma*T)/vol;const d2=d1-vol;const Nd1=stdNormCdf(d1),Nd2=stdNormCdf(d2);return S*Nd1-K*Nd2;}
-function bsDelta(S,K,T,sigma){if(T<=0||sigma<=0)return S>K?1:0;const vol=sigma*Math.sqrt(T);const d1=(Math.log(S/K)+0.5*sigma*sigma*T)/vol;return stdNormCdf(d1);}
+
+/* --- 優化 1: BS 函式加入 r (無風險利率) --- */
+function bsCall(S, K, T, sigma, r) {
+  if (T <= 0 || sigma <= 0) return Math.max(0, S - K);
+  const vol = sigma * Math.sqrt(T);
+  const d1 = (Math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / vol;
+  const d2 = d1 - vol;
+  const Nd1 = stdNormCdf(d1), Nd2 = stdNormCdf(d2);
+  return S * Nd1 - K * Math.exp(-r * T) * Nd2; // K 需折現
+}
+
+function bsDelta(S, K, T, sigma, r) {
+  if (T <= 0 || sigma <= 0) return S > K ? 1 : 0;
+  const vol = sigma * Math.sqrt(T);
+  const d1 = (Math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / vol;
+  return stdNormCdf(d1);
+}
 
 function run(){
   const S0=parseFloat(document.getElementById('S0').value);
@@ -157,6 +211,10 @@ function run(){
   const dteOldNow=parseInt(document.getElementById('dteOldNow').value,10);
   const dteNewNow=parseInt(document.getElementById('dteNewNow').value,10);
   const holdDays=parseInt(document.getElementById('holdDays').value,10);
+  
+  /* --- 優化 1 & 2: 讀取 r 和 deltaTrigger --- */
+  const r = parseFloat(document.getElementById('riskFree').value) / 100;
+  const deltaTrigger = parseFloat(document.getElementById('deltaTrigger').value);
 
   const scenarios=[{name:'下跌 −3%',mult:0.97},{name:'橫盤 0%',mult:1.00},{name:'上漲 +3%',mult:1.03},{name:'上漲 +5%',mult:1.05},{name:'上漲 +10%',mult:1.10},{name:'上漲 +15%',mult:1.15}];
   const tbody=document.querySelector('#result tbody');tbody.innerHTML='';
@@ -169,13 +227,18 @@ function run(){
 
   scenarios.forEach(s=>{
     const Sroll=S0*s.mult;
-    const oldPrice=bsCall(Sroll,K1,Told,ivOld); // 舊倉用 K1
-    const newPrice=bsCall(Sroll,K2,Tnew,ivNew); // 新倉用 K2（可不同）
-    const delta=bsDelta(Sroll,K1,Told,ivOld);   // 觸發觀察以舊倉 K1 為準
+    
+    /* --- 優化 1: 傳入 r --- */
+    const oldPrice=bsCall(Sroll,K1,Told,ivOld, r); // 舊倉用 K1
+    const newPrice=bsCall(Sroll,K2,Tnew,ivNew, r); // 新倉用 K2（可不同）
+    const delta=bsDelta(Sroll,K1,Told,ivOld, r);   // 觸發觀察以舊倉 K1 為準
+    
     const netIncome=newPrice-oldPrice;
     const cumIncome=(priceOldNow-oldPrice)+newPrice;
 
     const tr=document.createElement('tr');
+    
+    /* --- 優化 2: 使用 deltaTrigger 變數 --- */
     tr.innerHTML=`
       <td>${s.name}</td>
       <td>${Sroll.toFixed(2)}</td>
@@ -186,10 +249,25 @@ function run(){
       <td>$${newPrice.toFixed(2)}</td>
       <td class='${netIncome>=0?'green':'red'}'>$${netIncome.toFixed(2)}</td>
       <td class='${cumIncome>=0?'green':'red'}'>$${cumIncome.toFixed(2)}</td>
-      <td>${delta<0.6?`Roll-out 同價（K₂=${K2}）`:`Roll-up 建議（K₂≥${K2}）`}</td>`;
+      <td>${delta < deltaTrigger ? `Roll-out 同價 (K₂=${K2})` : `Roll-up 建議 (K₂≥${K2})`}</td>`;
     tbody.appendChild(tr);
   });
 }
+
+/* --- 優化 4: 自動計算 --- */
+
+// 1. 頁面載入完成後，自動執行一次計算
+document.addEventListener('DOMContentLoaded', run);
+
+// 2. 綁定所有 input 元素，當數值變更 (change) 時自動執行 run()
+const inputs = document.querySelectorAll('input, select');
+inputs.forEach(input => {
+  // 使用 'change' 事件，在使用者結束編輯 (例如移開焦點) 時觸發
+  input.addEventListener('change', run); 
+  // 如果希望即時(key up)更新，可以用 'input' 事件，但 'change' 對數字輸入效能較好
+});
+
 </script>
 </body>
 </html>
+```
